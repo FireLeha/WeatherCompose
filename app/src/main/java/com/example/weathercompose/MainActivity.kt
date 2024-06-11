@@ -5,44 +5,53 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.tooling.preview.Preview
 import com.android.volley.Request
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
 import com.example.weathercompose.data.WeatherModel
+import com.example.weathercompose.screens.DialogSearch
 import com.example.weathercompose.screens.MainCard
 import com.example.weathercompose.screens.TabLayout
-import com.example.weathercompose.ui.theme.WeatherComposeTheme
 import org.json.JSONObject
 
-const val API_KEY = "4ba1a1ae2a634f5d8ed142817241904"
+//const val API_KEY = "4ba1a1ae2a634f5d8ed142817241904"
 
 class MainActivity : ComponentActivity() {
+    private val apikey = BuildConfig.API_KEY
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val daysList = remember {
+            val daysList = rememberSaveable {
                 mutableStateOf(listOf<WeatherModel>())
             }
-            val currentDay = remember {
+            val currentDay = rememberSaveable {
                 mutableStateOf(WeatherModel())
             }
-            getData("Saint-Petersburg", this, daysList, currentDay)
+            val dialogState = rememberSaveable {
+                mutableStateOf(false)
+            }
+            val cityName = rememberSaveable {
+                mutableStateOf("Санкт-Петербург")
+            }
+
+            if (dialogState.value) {
+                DialogSearch(dialogState, onSubmit = {
+                    cityName.value = it
+                    getData(it, this@MainActivity, daysList, currentDay)
+                })
+            }
+            getData(cityName.value, this, daysList, currentDay)
             Image(
                 modifier = Modifier
                     .fillMaxSize()
@@ -52,8 +61,13 @@ class MainActivity : ComponentActivity() {
                 contentScale = ContentScale.FillBounds,
             )
             Column {
-                MainCard(currentDay)
-                TabLayout(daysList)
+                MainCard(currentDay, onClickSync = {
+                    getData(cityName.value, this@MainActivity, daysList, currentDay)
+                }, onClickSearch = {
+                    dialogState.value = true
+                }
+                )
+                TabLayout(daysList, currentDay)
             }
         }
     }
@@ -65,16 +79,17 @@ class MainActivity : ComponentActivity() {
         currentDay: MutableState<WeatherModel>
     ) {
         val url = "https://api.weatherapi.com/v1/forecast.json?key=" +
-                API_KEY +
+                apikey +
                 "&q=$city" +
                 "&days=3" +
-                "&aqi=no&alerts=no"
+                "&lang=ru"
         val queue = Volley.newRequestQueue(context)
         val sRequest = StringRequest(
             Request.Method.GET,
             url,
             { response ->
-                val list = getWeatherByDays(response)
+                val responseRus = String(response.toByteArray(Charsets.ISO_8859_1), Charsets.UTF_8)
+                val list = getWeatherByDays(responseRus)
                 currentDay.value = list[0]
                 daysList.value = list
             },
